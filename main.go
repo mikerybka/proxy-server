@@ -27,13 +27,7 @@ func main() {
 	}
 
 	// Create a reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Update the request's host to match the backend
-		r.Host = target.Host
-		proxy.ServeHTTP(w, r)
-	})
+	http.Handle("/", httputil.NewSingleHostReverseProxy(target))
 
 	log.Printf("Starting proxy server on port %s, forwarding to %s", port, backendURL)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
