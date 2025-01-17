@@ -1,9 +1,10 @@
 package main
 
 import (
-	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 )
 
@@ -19,44 +20,19 @@ func main() {
 		log.Fatal("Environment variable PORT is not set")
 	}
 
+	// Parse the backend URL
+	target, err := url.Parse(backendURL)
+	if err != nil {
+		log.Fatalf("Invalid BACKEND_URL: %v", err)
+	}
+
+	// Create a reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Construct the backend URL
-		proxyURL := backendURL + r.URL.Path
-
-		// Create a new request to the backend
-		req, err := http.NewRequest(r.Method, proxyURL, r.Body)
-		if err != nil {
-			http.Error(w, "Failed to create request", http.StatusInternalServerError)
-			return
-		}
-
-		// Copy the headers from the original request
-		for name, values := range r.Header {
-			for _, value := range values {
-				req.Header.Add(name, value)
-			}
-		}
-
-		// Perform the request to the backend
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			http.Error(w, "Failed to reach backend", http.StatusBadGateway)
-			return
-		}
-		defer resp.Body.Close()
-
-		// Copy the headers and status code from the backend response
-		for name, values := range resp.Header {
-			for _, value := range values {
-				w.Header().Add(name, value)
-			}
-		}
-		w.WriteHeader(resp.StatusCode)
-
-		// Copy the body from the backend response
-		if _, err := io.Copy(w, resp.Body); err != nil {
-			log.Printf("Failed to copy response body: %v", err)
-		}
+		// Update the request's host to match the backend
+		r.Host = target.Host
+		proxy.ServeHTTP(w, r)
 	})
 
 	log.Printf("Starting proxy server on port %s, forwarding to %s", port, backendURL)
